@@ -1,5 +1,5 @@
 [project]
-name = "ftr-terrain-generation"
+name = "FTR-Bench-terrain-gen"
 version = "0.1.0"
 description = "Procedural generator for FTR-Benchmark terrain courses (usd/map/yaml/json)"
 requires-python = ">=3.10"

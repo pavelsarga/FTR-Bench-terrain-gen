@@ -1,4 +1,4 @@
-# ftr-terrain-generation
+# FTR-Bench-terrain-generation
 
 Procedural generator for FTR-Benchmark terrain courses. From a single
 `terrain_config.yaml` (obstacle types, graded repeats, min/max height per
@@ -32,9 +32,7 @@ python generate_terrain.py terrain_config_example.yaml \
 subfolders line up with what `Terrain.__init__` expects. `--overwrite` is
 required to replace existing files.
 
-See `terrain_config_example.yaml` for the full schema. `terrain_config_marv.yaml`
-is a MARV-specific variant capped at 0.55m (the MARV flipper length), since a
-platform taller than the flipper can't be climbed.
+See `terrain_config_example.yaml` for the full schema.
 
 ## Obstacle catalog
 
