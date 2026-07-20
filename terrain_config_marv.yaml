@@ -1,0 +1,27 @@
+# MARV-sized course: raised_platform, 10 graded repeats (easiest repeat 0 ->
+# hardest repeat 9). Capped at 0.55m, the MARV flipper length (bbox x-extent
+# in src/flipper_training/robots/marv.yaml: 0.66351 - 0.10897) — a platform
+# taller than the flipper can't be climbed at all, so this is a hard ceiling.
+#
+# Run:
+#   python generate_terrain.py terrain_config_marv.yaml \
+#       --output-dir /path/to/src/FTR-Benchmark/ftr_envs/assets/terrain --overwrite
+
+name: marv_mixed
+seed: 12345
+cell_size: 0.05
+repeats: 10
+
+tile:
+  width: 5.0            # travel/X direction — 1m spawn + 3m platform + 1m goal
+  depth: 3.333333333333  # lane/Y direction
+
+border_width: 2.0
+base_z: 0.5
+
+camera:
+  position: [-40, 40, 25]
+  target: [0, 5, -5]
+
+rows:
+  - {type: raised_platform, min_height: 0.15, max_height: 0.55}
