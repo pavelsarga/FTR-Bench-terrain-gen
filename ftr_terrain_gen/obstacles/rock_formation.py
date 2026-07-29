@@ -6,15 +6,13 @@ from ftr_terrain_gen.obstacle_base import DifficultyParams, Obstacle, TileSpec
 from ftr_terrain_gen.shapes import paint_rect, value_noise_2d
 from ftr_terrain_gen.usd_utils import add_ground_slab
 
-FRONT_MARGIN = 1.5  # default flat spawn zone at the start of the tile
 FIELD_SIZE = 3.0  # default formation field extent (X and Y)
 GRID_N = 7  # default grid resolution — coarser than cobblestones for a chunky, low-poly look
 N_LEVELS = 4  # default number of discrete height tiers (not continuous — gives stepped terracing)
 COARSE_N = 3  # default resolution of the underlying random control-point grid before smoothing
 DROPOUT = 0.15  # default noise threshold below which a cell is omitted entirely (stays flat) —
 # this is what breaks up the field's outline into an irregular, ragged footprint
-# back margin (flat goal zone) is whatever's left of tile.width — 1.0m by
-# default (FRONT_MARGIN + FIELD_SIZE + 1.0 == the default tile.width of 5.0)
+# the field is centered in the tile — flat margins on each side are equal
 
 
 class RockFormation(Obstacle):
@@ -25,9 +23,10 @@ class RockFormation(Obstacle):
     share similar heights, giving a cohesive stepped/terraced look instead
     of checkerboard static. Cells whose noise value falls below `dropout`
     are omitted entirely (left flat), which breaks the field's outline into
-    an irregular, ragged footprint rather than a filled rectangle.
-    `extra.front_margin`/`extra.field_size`/`extra.grid_n`/`extra.n_levels`/
-    `extra.coarse_n`/`extra.dropout` override the defaults above.
+    an irregular, ragged footprint rather than a filled rectangle. CENTERED
+    in the tile (both margins equal).
+    `extra.field_size`/`extra.grid_n`/`extra.n_levels`/`extra.coarse_n`/
+    `extra.dropout` override the defaults above.
     """
 
     name = "rock_formation"
@@ -47,8 +46,7 @@ class RockFormation(Obstacle):
         return field_size, grid_n, cell, heights, active
 
     def _field_x(self, tile: TileSpec, diff: DifficultyParams, field_size: float) -> float:
-        front_margin = diff.extra.get("front_margin", FRONT_MARGIN)
-        return -tile.width / 2 + front_margin + field_size / 2
+        return 0.0
 
     def _cells(self, tile: TileSpec, diff: DifficultyParams):
         field_size, grid_n, cell, heights, active = self._field(diff)

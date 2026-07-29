@@ -92,6 +92,14 @@ class Obstacle(ABC):
         """Override only if a type has a natural minimum repeat count."""
         return requested
 
+    def birth_offsets(self, tile: TileSpec, diff: DifficultyParams) -> tuple[float, float]:
+        """Extra Z offset (meters) added on top of the birth clearance Z for
+        this tile's (start, target) points. Default (0, 0) — flat spawn/goal
+        margins at ground level. Override when start or target instead sits
+        on a raised feature (e.g. a stair platform).
+        """
+        return 0.0, 0.0
+
     def flat_heightmap(self, tile: TileSpec) -> np.ndarray:
         """Convenience: an all-`base_z` patch, for obstacles/subclasses to start from."""
         return np.full((tile.nx, tile.ny), tile.base_z, dtype=np.float32)

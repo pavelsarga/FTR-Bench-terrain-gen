@@ -6,22 +6,19 @@ from ftr_terrain_gen.obstacle_base import DifficultyParams, Obstacle, TileSpec
 from ftr_terrain_gen.shapes import MIN_EDGE_MARGIN, paint_rect, x_segment_centers
 from ftr_terrain_gen.usd_utils import add_ground_slab
 
-FRONT_MARGIN = 1.5  # default flat spawn zone at the start of the tile
 TRENCH_DEPTH = 0.3  # default fixed depth — this obstacle grades WIDTH, not depth
 MIN_WIDTH = 0.3  # default trench width at the easiest repeat (diff.t == 0)
 MAX_WIDTH = 1.5  # default trench width at the hardest repeat (diff.t == 1)
-# back margin (flat goal zone) is whatever's left of tile.width, and shrinks
-# as the trench widens across repeats — with the defaults above and a 5.0m
-# tile.width, that's always comfortably positive (min 2.0m, at MAX_WIDTH)
+# the trench is centered in the tile — margins on each side are equal and
+# shrink together as the trench widens across repeats
 
 
 class WideningTrench(Obstacle):
-    """A single trench, starting `front_margin` in from the tile's leading
-    edge, whose WIDTH (not depth) is graded across repeats: `min_width`
-    (default 0.3m) at the easiest repeat to `max_width` (default 1.5m) at
-    the hardest. Depth is fixed at `trench_depth` (default 0.3m).
-    All four overridable via `extra.front_margin`/`extra.trench_depth`/
-    `extra.min_width`/`extra.max_width`.
+    """A single trench, CENTERED in the tile (both margins equal), whose
+    WIDTH (not depth) is graded across repeats: `min_width` (default 0.3m)
+    at the easiest repeat to `max_width` (default 1.5m) at the hardest.
+    Depth is fixed at `trench_depth` (default 0.3m). Overridable via
+    `extra.trench_depth`/`extra.min_width`/`extra.max_width`.
 
     Built as 3 non-overlapping segments along X (spawn/trench/goal), NOT a
     full-tile base slab plus an embedded trench cube — a full-width slab
@@ -37,10 +34,9 @@ class WideningTrench(Obstacle):
         return lo + (hi - lo) * diff.t
 
     def _segments(self, tile: TileSpec, diff: DifficultyParams):
-        front_margin = diff.extra.get("front_margin", FRONT_MARGIN)
         width = self._width(diff)
-        back_margin = tile.width - front_margin - width
-        widths = [front_margin, width, back_margin]
+        margin = (tile.width - width) / 2
+        widths = [margin, width, margin]
         is_trench = [False, True, False]
         centers = x_segment_centers(tile, widths)
         return list(zip(centers, widths, is_trench))

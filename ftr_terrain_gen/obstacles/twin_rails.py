@@ -6,12 +6,10 @@ from ftr_terrain_gen.obstacle_base import DifficultyParams, Obstacle, TileSpec
 from ftr_terrain_gen.shapes import paint_rect, x_segment_centers
 from ftr_terrain_gen.usd_utils import add_ground_slab
 
-FRONT_MARGIN = 1.0  # default flat spawn zone at the start of the tile
 RAIL_WIDTH = 0.2  # default thickness of each rail along X (both rails equal)
 GAP_WIDTH = 1.0  # default flat space between the two rails
-# back margin (flat goal zone) is whatever's left of tile.width — 2.5m by
-# default (FRONT_MARGIN + RAIL_WIDTH + GAP_WIDTH + RAIL_WIDTH + 2.5
-# == the default tile.width of 5.0)
+# the rail+gap+rail feature is centered in the tile — margins on each side
+# are equal
 WALL_WIDTH = 0.1  # default thin guard-wall thickness on each side
 WALL_HEIGHT = 0.15  # default guard-wall height ABOVE the rails' own top surface
 
@@ -19,23 +17,23 @@ WALL_HEIGHT = 0.15  # default guard-wall height ABOVE the rails' own top surface
 class TwinRails(Obstacle):
     """Left to right: a flat spawn zone, a thin raised rail spanning the
     full lane width (at right angle to the direction of travel), a flat gap,
-    a second rail (same thickness as the first), then a flat goal zone.
+    a second rail (same thickness as the first), then a flat goal zone —
+    the rail+gap+rail feature is CENTERED in the tile (both margins equal).
     `diff.height` grades both rails' height together. Two thin flat guard
     walls run along the Y edges of the tile, spanning the rails+gap section
     (from the first rail's leading edge to the second rail's trailing
     edge), taller than the rails, enclosing the crossing on both sides.
-    `extra.front_margin`/`extra.rail_width`/`extra.gap_width`/
-    `extra.wall_width`/`extra.wall_height` override the defaults above.
+    `extra.rail_width`/`extra.gap_width`/`extra.wall_width`/
+    `extra.wall_height` override the defaults above.
     """
 
     name = "twin_rails"
 
     def _rail_centers(self, tile: TileSpec, diff: DifficultyParams) -> tuple[float, float]:
-        front_margin = diff.extra.get("front_margin", FRONT_MARGIN)
         rail_width = diff.extra.get("rail_width", RAIL_WIDTH)
         gap_width = diff.extra.get("gap_width", GAP_WIDTH)
-        back_margin = tile.width - front_margin - 2 * rail_width - gap_width
-        widths = [front_margin, rail_width, gap_width, rail_width, back_margin]
+        margin = (tile.width - 2 * rail_width - gap_width) / 2
+        widths = [margin, rail_width, gap_width, rail_width, margin]
         centers = x_segment_centers(tile, widths)
         return centers[1], centers[3]
 

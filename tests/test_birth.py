@@ -40,11 +40,12 @@ def test_start_is_trailing_edge_target_is_leading_edge():
 
 def test_start_and_target_land_outside_the_platform():
     # raised_platform's platform is centered in the tile (PLATFORM_WIDTH
-    # wide, FRONT_MARGIN in from each edge) — start/target must NOT fall
-    # inside [platform_x - PLATFORM_WIDTH/2, platform_x + PLATFORM_WIDTH/2],
-    # which is centered on the tile (x_center), regardless of platform size,
-    # as long as birth_clearance < FRONT_MARGIN (the default 0.5 < 1.5 is).
-    from ftr_terrain_gen.obstacles.raised_platform import FRONT_MARGIN, PLATFORM_WIDTH
+    # wide) — start/target must NOT fall inside
+    # [platform_x - PLATFORM_WIDTH/2, platform_x + PLATFORM_WIDTH/2], which
+    # is centered on the tile (x_center), as long as birth_clearance is
+    # smaller than the resulting margin ((tile.width - PLATFORM_WIDTH) / 2
+    # == 1.5 here, comfortably bigger than the 0.5 used below).
+    from ftr_terrain_gen.obstacles.raised_platform import PLATFORM_WIDTH
 
     grid = make_grid()
     birth = build_birth(grid, birth_clearance=0.5)

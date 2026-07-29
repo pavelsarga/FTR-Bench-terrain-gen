@@ -30,7 +30,10 @@ def main() -> None:
     with open(args.terrain_config) as f:
         course_cfg = yaml.safe_load(f)
 
-    generate(course_cfg, args.output_dir, overwrite=args.overwrite, dry_run=args.dry_run)
+    generate(
+        course_cfg, args.output_dir, source_config_path=args.terrain_config,
+        overwrite=args.overwrite, dry_run=args.dry_run,
+    )
 
 
 if __name__ == "__main__":

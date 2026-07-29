@@ -6,14 +6,12 @@ from ftr_terrain_gen.obstacle_base import DifficultyParams, Obstacle, TileSpec
 from ftr_terrain_gen.shapes import paint_rect
 from ftr_terrain_gen.usd_utils import add_ground_slab
 
-FRONT_MARGIN = 1.5  # default flat spawn zone at the start of the tile
 FIELD_SIZE = 3.0  # default pyramid field extent (X and Y)
 N_ROWS = 7  # default number of diagonal rows (MUST be odd — a single symmetric peak row)
 HIDDEN_LAYERS = 0  # default number of outermost rows on EACH end left at height 0 (flush with
 # the ground, no visible step) instead of getting a raised cube — e.g. hidden_layers=4 makes
 # the 4 rows closest to each corner flat, giving a flat corner before the steps begin
-# back margin (flat goal zone) is whatever's left of tile.width — 1.0m by
-# default (FRONT_MARGIN + FIELD_SIZE + 1.0 == the default tile.width of 5.0)
+# the field is centered in the tile — flat margins on each side are equal
 
 
 class DiagonalPyramid(Obstacle):
@@ -21,7 +19,10 @@ class DiagonalPyramid(Obstacle):
     cubes, where height is banded along the DIAGONAL (`i + j`): `n_rows`
     (default 7) diagonal rows rise from the two opposite corners to a
     single peak row through the center, then fall again — a diagonal
-    pyramid. `hidden_layers` (default 0) outermost rows on EACH end are
+    pyramid. The diagonal's tilt (which pair of corners it rises from)
+    mirrors across Y by repeat (`diff.col_index` parity), so it alternates
+    left-to-right / right-to-left rather than always tilting the same way.
+    `hidden_layers` (default 0) outermost rows on EACH end are
     left at height 0 (flush with the ground, no cube at all) instead of
     getting a step — e.g. `hidden_layers: 4` leaves the 4 rows nearest each
     corner completely flat, so the pyramid only starts rising partway in.
@@ -30,9 +31,10 @@ class DiagonalPyramid(Obstacle):
     visibly distinct step rather than blending into the flat corner.
     Row spacing/count is fixed; only the RISE per (visible) row grades
     with difficulty, same convention as raised_stairs/lowered_stairs.
-    `extra.front_margin`/`extra.field_size`/`extra.n_rows`/
-    `extra.hidden_layers` override the defaults above (`n_rows` must be
-    odd; `hidden_layers` must leave at least the peak row visible).
+    CENTERED in the tile (both margins equal).
+    `extra.field_size`/`extra.n_rows`/`extra.hidden_layers` override the
+    defaults above (`n_rows` must be odd; `hidden_layers` must leave at
+    least the peak row visible).
     """
 
     name = "diagonal_pyramid"
@@ -58,16 +60,17 @@ class DiagonalPyramid(Obstacle):
         return field_size, grid_n, cell, peak, hidden_layers, m, rise_per_row
 
     def _field_x(self, tile: TileSpec, diff: DifficultyParams, field_size: float) -> float:
-        front_margin = diff.extra.get("front_margin", FRONT_MARGIN)
-        return -tile.width / 2 + front_margin + field_size / 2
+        return 0.0
 
     def _cells(self, tile: TileSpec, diff: DifficultyParams):
         field_size, grid_n, cell, peak, hidden_layers, m, rise_per_row = self._grid(diff)
         x0 = self._field_x(tile, diff, field_size) - field_size / 2
         y0 = -field_size / 2
+        mirror = diff.col_index % 2 == 1  # alternates the diagonal's tilt by repeat
         for i in range(grid_n):
             for j in range(grid_n):
-                u = i + j
+                j_band = (grid_n - 1 - j) if mirror else j
+                u = i + j_band
                 if u < hidden_layers or u > 2 * peak - hidden_layers:
                     continue  # in the hidden band — flush with the ground, no cube
                 distance = abs(u - peak)

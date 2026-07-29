@@ -6,7 +6,6 @@ from ftr_terrain_gen.obstacle_base import DifficultyParams, Obstacle, TileSpec
 from ftr_terrain_gen.shapes import paint_rect
 from ftr_terrain_gen.usd_utils import add_ground_slab
 
-FRONT_MARGIN = 1.0  # flat spawn zone at the start of the tile
 FIELD_SIZE = 3.0  # raised-patch extent, X and Y
 
 
@@ -15,15 +14,15 @@ class HalfPlatform(Obstacle):
     `field_size` patch is raised — one track crosses flat ground while the
     other is elevated. Which half is raised alternates by repeat
     (`diff.col_index` parity), not randomly. `diff.height` (graded
-    `min_height` -> `max_height`) is the raised half's height.
-    `extra.front_margin`/`extra.field_size` override the defaults above.
+    `min_height` -> `max_height`) is the raised half's height. Field is
+    CENTERED in the tile (both margins equal). `extra.field_size` overrides
+    the default above.
     """
 
     name = "half_platform"
 
     def _field_x(self, tile: TileSpec, diff: DifficultyParams, field_size: float) -> float:
-        front_margin = diff.extra.get("front_margin", FRONT_MARGIN)
-        return -tile.width / 2 + front_margin + field_size / 2
+        return 0.0
 
     def _half(self, tile: TileSpec, diff: DifficultyParams):
         field_size = diff.extra.get("field_size", FIELD_SIZE)

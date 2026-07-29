@@ -6,21 +6,19 @@ from ftr_terrain_gen.obstacle_base import DifficultyParams, Obstacle, TileSpec
 from ftr_terrain_gen.shapes import paint_rect
 from ftr_terrain_gen.usd_utils import add_ground_slab
 
-FRONT_MARGIN = 1.0  # default flat spawn zone at the start of the tile
 FIELD_SIZE = 3.0  # default cobblestone field extent (X and Y) — a "3x3m part of the base"
 GRID_N = 11  # default grid resolution (grid_n x grid_n cells)
-# back margin (flat goal zone) is whatever's left of tile.width — 1.0m by
-# default (FRONT_MARGIN + FIELD_SIZE + 1.0 == the default tile.width of 5.0)
+# the field is centered in the tile — flat margins on each side are equal
 
 
 class Cobblestones(Obstacle):
-    """A `field_size` x `field_size` (default 3m x 3m) patch, centered in
-    the lane, split into a `grid_n` x `grid_n` (default 11x11) grid of
+    """A `field_size` x `field_size` (default 3m x 3m) patch, CENTERED in
+    the tile, split into a `grid_n` x `grid_n` (default 11x11) grid of
     small raised blocks. Each cell's height is independently randomized
     (seeded, reproducible from `diff.seed`) between 0 and `diff.height` —
     so the field gets rougher, not just uniformly taller, as difficulty
-    increases. `extra.front_margin`/`extra.field_size`/`extra.grid_n`
-    override the defaults above.
+    increases. `extra.field_size`/`extra.grid_n` override the defaults
+    above.
     """
 
     name = "cobblestones"
@@ -33,8 +31,7 @@ class Cobblestones(Obstacle):
         return field_size, grid_n, cell, heights
 
     def _field_x(self, tile: TileSpec, diff: DifficultyParams, field_size: float) -> float:
-        front_margin = diff.extra.get("front_margin", FRONT_MARGIN)
-        return -tile.width / 2 + front_margin + field_size / 2
+        return 0.0
 
     def _cells(self, tile: TileSpec, diff: DifficultyParams):
         field_size, grid_n, cell, heights = self._grid(diff)
