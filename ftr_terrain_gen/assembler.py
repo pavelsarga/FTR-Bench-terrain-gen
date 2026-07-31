@@ -210,7 +210,16 @@ def build_config_yaml(grid: CourseGrid, camera: dict) -> dict:
         "prim_config": {
             "set_attrs": [
                 {"prim_path": "terrain", "attr_name": "xformOp:translate", "value": [0.0, 0.0, 0.0]},
-                {"prim_path": "terrain", "attr_name": "xformOp:orient", "value": [0, 0, 0, 1.0]},
+                # Identity orientation, in (w, x, y, z) order — FTR-Benchmark's terrain.py
+                # applies this via Gf.Quatd(*value), which takes the real part FIRST.
+                # Writing it XYZW as [0, 0, 0, 1.0] (as cur_mixed.yaml and earlier versions
+                # of this file did) yields w=0, z=1 — a 180 degree rotation about Z that
+                # mirrors the whole course in X and Y. birth.json and any consumer that
+                # reads row/column geometry from this config use the UN-rotated placement,
+                # so that silently reverses both the row and the column index of every tile
+                # (row -> n_rows-1-row, col -> repeats-1-col) and applies each tile's
+                # birth_offsets Z at a position occupied by a different obstacle.
+                {"prim_path": "terrain", "attr_name": "xformOp:orient", "value": [1.0, 0, 0, 0]},
             ]
         },
         "map": {
