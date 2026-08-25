@@ -3,9 +3,13 @@ that tile's own flat spawn/goal margins (not at the tile center, which is
 where the obstacle itself — e.g. raised_platform's platform — sits), so the
 robot spawns in front of the obstacle and its target is just past it.
 
-Entries are listed hardest-repeat-first per row (REVERSE column order), and
-start/target are swapped so the robot drives in the -X direction (from the
-tile's trailing edge to its leading edge) instead of +X.
+Entries are listed COLUMN-MAJOR: one tile per row (obstacle type) before
+moving on to the next column, so a run with fewer robots than tiles spreads
+them across all obstacle types instead of filling one type's row first
+(`FtrEnv._prepare_reset_info` hands entries out with `itertools.cycle`).
+Columns are traversed hardest-repeat-first, and start/target are swapped so
+the robot drives in the -X direction (from the tile's trailing edge to its
+leading edge) instead of +X.
 """
 
 from __future__ import annotations
@@ -33,9 +37,8 @@ def build_birth(grid: CourseGrid, z_clearance: float = 0.125, birth_clearance: f
     facing_negative_x = [0, 0, 3.14]
     tile_spec = grid.tile_spec()
 
-    # rows stay in their configured order; only the within-row column
-    # (difficulty) traversal is reversed
-    tiles = sorted(grid.iter_tiles(), key=lambda t: (t.row_index, -t.col_index))
+    # column-major: all rows of a column first; columns hardest-first
+    tiles = sorted(grid.iter_tiles(), key=lambda t: (-t.col_index, t.row_index))
     entries: list[dict] = []
     for tile in tiles:
         obstacle = get_obstacle(tile.obstacle_type)
