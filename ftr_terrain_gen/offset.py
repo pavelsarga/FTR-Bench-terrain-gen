@@ -64,6 +64,15 @@ class OffsetObstacle(Obstacle):
         UsdGeom.Xformable(xform).AddTranslateOp().Set(Gf.Vec3d(self.dx, self.dy, 0.0))
         self.base.build_usd(stage, sub_path, self._sub(tile), diff)
 
+    def build_lips(self, stage, prim_path: str, tile: TileSpec, diff: DifficultyParams, spec) -> int | None:
+        # lips live under the offset Xform, in the sub-tile's frame, exactly like the geometry
+        from ftr_terrain_gen.edges import build_lips_usd
+
+        sub_path = prim_path.rsplit("/", 1)[0] + "/offset/lips"
+        sub = self._sub(tile)
+        own = self.base.build_lips(stage, sub_path, sub, diff, spec)
+        return own if own is not None else build_lips_usd(stage, sub_path, self.base.build_heightmap(sub, diff), sub, spec)
+
     def build_heightmap(self, tile: TileSpec, diff: DifficultyParams) -> np.ndarray:
         h = self.flat_heightmap(tile)
         sub = self._sub(tile)

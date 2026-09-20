@@ -124,3 +124,50 @@ def build_lips_usd(stage, root_path: str, h: np.ndarray, tile: TileSpec, spec: d
     if lips:
         bind_friction(stage, root_path, ensure_friction_material(stage, float(cfg["friction"])))
     return len(lips)
+
+
+def add_box_edge_lips(stage, root_path: str, cx: float, cy: float, length: float, width: float,
+                      yaw_deg: float, z_top: float, spec, start: int = 0) -> int:
+    """Nosings along the four top edges of a yaw-rotated box (a rotated ground
+    slab such as `diagonal_trunk`), for shapes whose edges are not cell-aligned
+    and therefore invisible to `find_lips`. Returns the number of lips added."""
+    import math
+
+    from ftr_terrain_gen.usd_utils import LIP_COLOR, add_cube
+
+    cfg = {**DEFAULT_LIP, **(spec if isinstance(spec, dict) else {})}
+    height, w = float(cfg["height"]), float(cfg["width"])
+    c, sn = math.cos(math.radians(yaw_deg)), math.sin(math.radians(yaw_deg))
+    k = start
+    # long edges (offset across, along the box's local y) and short edges (along local x)
+    for dx, dy, size in ((0.0, width / 2 + w / 2, (length + 2 * w, w, height + w)),
+                         (0.0, -(width / 2 + w / 2), (length + 2 * w, w, height + w)),
+                         (length / 2 + w / 2, 0.0, (w, width, height + w)),
+                         (-(length / 2 + w / 2), 0.0, (w, width, height + w))):
+        add_cube(stage, f"{root_path}/lip_{k:04d}", size,
+                 translate=(cx + dx * c - dy * sn, cy + dx * sn + dy * c, z_top + height),
+                 rotate_z_deg=yaw_deg, color=LIP_COLOR)
+        k += 1
+    return k - start
+
+
+def add_slab_edge_lips(stage, root_path: str, top_center, length: float, width: float,
+                       slope_deg: float, yaw_deg: float, spec, start: int = 0) -> int:
+    """Nosings along the four edges of a tilted slab (`tilted_pallet`): each lip
+    continues the slab's plane past the edge, `height` above it, so the
+    overhang at the high edge is a real nose and the low/side lips lie in the
+    plane. Lips of a partly buried slab end up underground, which is harmless."""
+    from ftr_terrain_gen.usd_utils import LIP_COLOR, _rotation_columns, add_tilted_slab, set_display_color
+
+    cfg = {**DEFAULT_LIP, **(spec if isinstance(spec, dict) else {})}
+    height, w = float(cfg["height"]), float(cfg["width"])
+    u, v, n = _rotation_columns(yaw_deg, slope_deg)
+    cx, cy, cz = top_center
+    k = start
+    for a, b, ln, wd in ((length / 2 + w / 2, 0.0, w, width), (-(length / 2 + w / 2), 0.0, w, width),
+                         (0.0, width / 2 + w / 2, length + 2 * w, w), (0.0, -(width / 2 + w / 2), length + 2 * w, w)):
+        top = tuple(cc + a * uu + b * vv + height * nn for cc, uu, vv, nn in zip((cx, cy, cz), u, v, n))
+        prim = add_tilted_slab(stage, f"{root_path}/lip_{k:04d}", top, ln, wd, slope_deg, yaw_deg, thickness=height + w)
+        set_display_color(prim, LIP_COLOR)
+        k += 1
+    return k - start

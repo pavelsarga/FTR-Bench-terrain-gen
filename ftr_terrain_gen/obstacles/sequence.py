@@ -62,6 +62,20 @@ class Sequence(Obstacle):
             UsdGeom.Xformable(xform).AddTranslateOp().Set(Gf.Vec3d(x_center, 0.0, 0.0))
             obstacle.build_usd(stage, part_path, sub_tile, sub_diff)
 
+    def build_lips(self, stage, prim_path: str, tile: TileSpec, diff: DifficultyParams, spec) -> int | None:
+        # lips per part, in the part's own frame (the part Xform carries the X offset): a log
+        # gets its ribs, a step its edge nosings
+        from ftr_terrain_gen.edges import build_lips_usd
+
+        n = 0
+        tile_root = prim_path.rsplit("/", 1)[0]
+        for k, (obstacle, sub_tile, sub_diff, x_center) in enumerate(self._parts(tile, diff)):
+            part_lips = f"{tile_root}/part_{k}_{obstacle.name}/lips"
+            own = obstacle.build_lips(stage, part_lips, sub_tile, sub_diff, spec)
+            n += own if own is not None else build_lips_usd(
+                stage, part_lips, obstacle.build_heightmap(sub_tile, sub_diff), sub_tile, spec)
+        return n
+
     def build_heightmap(self, tile: TileSpec, diff: DifficultyParams) -> np.ndarray:
         h = self.flat_heightmap(tile)
         for obstacle, sub_tile, sub_diff, x_center in self._parts(tile, diff):

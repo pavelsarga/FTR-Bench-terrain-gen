@@ -482,3 +482,32 @@ def test_round_log_ribs_sit_on_the_log_surface(tmp_path):
         dx = c[0] * math.cos(math.radians(30)) + c[1] * math.sin(math.radians(30))
         dist = math.hypot(dx, c[2] - cz)
         assert r - 0.005 <= dist <= r + 0.02, (str(prim.GetPath()), dist)
+
+
+def test_rotated_tilted_and_sequence_obstacles_get_their_own_lips(tmp_path):
+    pytest.importorskip("pxr")
+    from pxr import Usd
+
+    from ftr_terrain_gen.assembler import build_usd
+    from ftr_terrain_gen.grid import CourseGrid, RowConfig
+
+    rows = [
+        RowConfig(type="diagonal_trunk", min_height=0.25, max_height=0.25, extra={"edge_lip": True, "min_angle": 30, "max_angle": 30}),
+        RowConfig(type="tilted_pallet", min_height=0, max_height=0, extra={"edge_lip": True}),
+        RowConfig(type="steep_hill", min_height=0, max_height=0, extra={"edge_lip": True, "step_tread": 0.02, "min_angle": 20, "max_angle": 20}),
+        RowConfig(type="sequence", min_height=0, max_height=0, extra={"edge_lip": True, "parts": [
+            {"type": "round_log", "min_height": 0.2, "max_height": 0.2, "width": 4.4},
+            {"type": "raised_platform", "min_height": 0.2, "max_height": 0.2, "width": 4.4, "extra": {"platform_width": 1.0}}]}),
+    ]
+    grid = CourseGrid(rows=rows, repeats=1, tile_width=8.8, tile_depth=10.0 / 3.0, cell_size=0.05,
+                      base_z=0.5, border_width=2.0, course_seed=3)
+    build_usd(grid, tmp_path / "lips.usd")
+    stage = Usd.Stage.Open(str(tmp_path / "lips.usd"))
+    paths = [str(p.GetPath()) for p in stage.Traverse()]
+    n = lambda prefix: sum(1 for q in paths if q.startswith(prefix) and "/lips/lip_" in q or (q.startswith(prefix) and "/lips/rib_" in q))
+    assert n("/World/row_00_diagonal_trunk") == 4
+    assert n("/World/row_01_tilted_pallet") == 4
+    assert n("/World/row_02_steep_hill") == 0  # risers carry the friction, no heightmap bars
+    assert any("/World/row_02_steep_hill/tile_00/risers" == q for q in paths)
+    assert n("/World/row_03_sequence/tile_00/part_0_round_log") >= 8  # ribs on the log
+    assert n("/World/row_03_sequence/tile_00/part_1_raised_platform") == 2  # two edges of the step

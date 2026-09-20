@@ -178,6 +178,12 @@ class SteepHill(MeshObstacle):
         """Cells per mesh vertex across the lane: the plain hill is constant in Y."""
         return tile.ny  # two vertices: both lane edges
 
+    def build_lips(self, stage, prim_path: str, tile: TileSpec, diff: DifficultyParams, spec) -> int | None:
+        # the stepped mesh carries its own risers (bound to the lip friction by the assembler);
+        # the heightmap finder would add bars wherever the twist or a bump makes a 4 cm cell
+        # step, which is not an edge at all
+        return 0
+
     def build_usd(self, stage, prim_path: str, tile: TileSpec, diff: DifficultyParams) -> None:
         from ftr_terrain_gen.usd_utils import add_ground_slab, add_surface_mesh
 

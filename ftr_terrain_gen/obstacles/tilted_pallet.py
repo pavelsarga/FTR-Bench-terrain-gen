@@ -50,6 +50,15 @@ class TiltedPallet(Obstacle):
             thickness=diff.extra.get("thickness", THICKNESS),
         )
 
+    def build_lips(self, stage, prim_path: str, tile: TileSpec, diff: DifficultyParams, spec) -> int | None:
+        from ftr_terrain_gen.edges import add_slab_edge_lips, lip_friction
+        from ftr_terrain_gen.usd_utils import bind_friction, ensure_friction_material
+
+        length, width, pitch, yaw = self._params(diff)
+        n = add_slab_edge_lips(stage, prim_path, self._top_center(tile, length, pitch), length, width, pitch, yaw, spec)
+        bind_friction(stage, prim_path, ensure_friction_material(stage, lip_friction(spec)))
+        return n
+
     def build_heightmap(self, tile: TileSpec, diff: DifficultyParams) -> np.ndarray:
         h = self.flat_heightmap(tile)
         length, width, pitch, yaw = self._params(diff)

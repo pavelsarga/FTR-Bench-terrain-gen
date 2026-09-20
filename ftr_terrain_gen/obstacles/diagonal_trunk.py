@@ -78,6 +78,17 @@ class DiagonalTrunk(Obstacle):
         add_ground_slab(stage, f"{prim_path}/wall_pos", 0.0, wall_y, wall_length, wall_width, wall_top, tile)
         add_ground_slab(stage, f"{prim_path}/wall_neg", 0.0, -wall_y, wall_length, wall_width, wall_top, tile)
 
+    def build_lips(self, stage, prim_path: str, tile: TileSpec, diff: DifficultyParams, spec) -> int | None:
+        # the trunk is a yaw-rotated box: its edges are not cell-aligned, so lay the nosings
+        # along the real box edges instead of the heightmap's staircase approximation
+        from ftr_terrain_gen.edges import add_box_edge_lips, lip_friction
+        from ftr_terrain_gen.usd_utils import bind_friction, ensure_friction_material
+
+        length, width, angle_deg = self._geometry(tile, diff)
+        n = add_box_edge_lips(stage, prim_path, 0.0, 0.0, length, width, angle_deg, tile.base_z + diff.height, spec)
+        bind_friction(stage, prim_path, ensure_friction_material(stage, lip_friction(spec)))
+        return n
+
     def build_heightmap(self, tile: TileSpec, diff: DifficultyParams) -> np.ndarray:
         h = self.flat_heightmap(tile)
         length, width, angle_deg = self._geometry(tile, diff)
