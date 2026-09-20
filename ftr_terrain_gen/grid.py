@@ -24,6 +24,24 @@ class RowConfig:
     min_height: float = 0.0
     max_height: float = 0.0
     extra: dict[str, Any] = field(default_factory=dict)
+    # how `t` (0 = first repeat, 1 = last) maps to difficulty: "linear" (default),
+    # "quadratic" (t^2: spends more repeats on the easy end) or "sqrt" (spreads the
+    # repeats over the HARD end — the custom_mixed lesson: 4 of its 10 columns were
+    # ~100% for every policy, the interesting range was the last 3)
+    grade: str = "linear"
+    # lateral offset of the TARGET from the lane centreline, [min, max] metres, graded
+    # by t and alternating sign by repeat (see birth.py) — only for rows whose whole
+    # tile is flat except the feature that makes the offset necessary (offset_gate)
+    goal_lateral_offset: tuple[float, float] | None = None
+
+    def graded_t(self, t: float) -> float:
+        if self.grade == "quadratic":
+            return t * t
+        if self.grade == "sqrt":
+            return t**0.5
+        if self.grade != "linear":
+            raise ValueError(f"unknown grade {self.grade!r} (linear|quadratic|sqrt)")
+        return t
 
 
 @dataclass(frozen=True)
@@ -118,7 +136,7 @@ class CourseGrid:
         for row_index, row in enumerate(self.rows):
             y_center = (row_index - (self.n_rows - 1) / 2) * self.tile_depth
             for col_index in range(self.repeats):
-                t = 0.0 if self.repeats <= 1 else col_index / (self.repeats - 1)
+                t = 0.0 if self.repeats <= 1 else row.graded_t(col_index / (self.repeats - 1))
                 height = row.min_height + (row.max_height - row.min_height) * t
                 seed = self._seed_for(row_index, col_index)
                 diff = DifficultyParams(t=t, height=height, seed=seed, extra=row.extra, col_index=col_index)

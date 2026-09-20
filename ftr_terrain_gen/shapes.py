@@ -135,3 +135,108 @@ def symmetric_stair_profile(
     )
     centers = x_segment_centers(tile, widths)
     return list(zip(centers, widths, tops))
+
+
+def cell_centers(tile: TileSpec) -> tuple[np.ndarray, np.ndarray]:
+    """World-local (tile-centred) X/Y coordinate of every heightmap cell
+    centre, as two (tile.nx, tile.ny) arrays — the same sampling
+    `paint_rotated_rect` uses, shared by every analytic (non-box) shape."""
+    xs = np.linspace(-tile.width / 2, tile.width / 2, tile.nx, endpoint=False) + tile.width / (2 * tile.nx)
+    ys = np.linspace(-tile.depth / 2, tile.depth / 2, tile.ny, endpoint=False) + tile.depth / (2 * tile.ny)
+    return np.meshgrid(xs, ys, indexing="ij")
+
+
+def rotated_coords(tile: TileSpec, x_center: float, y_center: float, yaw_deg: float):
+    """Coordinates of every cell centre in a frame turned `yaw_deg` about Z at
+    (x_center, y_center): `u` along the turned X axis, `v` across it."""
+    gx, gy = cell_centers(tile)
+    theta = np.radians(yaw_deg)
+    dx, dy = gx - x_center, gy - y_center
+    u = dx * np.cos(theta) + dy * np.sin(theta)
+    v = -dx * np.sin(theta) + dy * np.cos(theta)
+    return u, v
+
+
+def paint_tilted_rect(
+    h: np.ndarray,
+    tile: TileSpec,
+    top_center: tuple[float, float, float],
+    length: float,
+    width: float,
+    slope_deg: float,
+    yaw_deg: float = 0.0,
+    mode: str = "max",
+) -> np.ndarray:
+    """Heightmap counterpart of `usd_utils.add_tilted_slab`: inside the top
+    face's XY footprint (the yaw-rotated rectangle length*cos(slope) x
+    width) the height is the plane through `top_center` rising
+    `tan(slope)` per metre along the yawed axis. `mode="max"` only raises
+    cells (a slab lying on top of whatever is there), `mode="set"`
+    overwrites (a slab that is the ground, e.g. a ramp cut into a pit)."""
+    cx, cy, cz = top_center
+    u, v = rotated_coords(tile, cx, cy, yaw_deg)
+    slope = np.tan(np.radians(slope_deg))
+    half_len = length * np.cos(np.radians(slope_deg)) / 2
+    mask = (np.abs(u) <= half_len) & (np.abs(v) <= width / 2)
+    plane = cz + slope * u
+    if mode == "max":
+        h[mask] = np.maximum(h[mask], plane[mask])
+    else:
+        h[mask] = plane[mask]
+    return h
+
+
+def paint_profile_along(
+    h: np.ndarray,
+    tile: TileSpec,
+    profile,
+    yaw_deg: float = 0.0,
+    x_center: float = 0.0,
+    y_center: float = 0.0,
+    mode: str = "set",
+) -> np.ndarray:
+    """Evaluate a 1-D height profile `profile(u) -> z` (vectorised over a numpy
+    array of along-axis coordinates, absolute world Z) at every cell centre,
+    with the axis turned `yaw_deg` about Z — a ramp, ridge or staircase
+    crossing the lane at an angle. The profile must return the flat ground
+    height outside its own feature so the tile stays continuous."""
+    u, _ = rotated_coords(tile, x_center, y_center, yaw_deg)
+    z = profile(u)
+    if mode == "max":
+        np.maximum(h, z, out=h)
+    else:
+        h[...] = z
+    return h
+
+
+def paint_cylinder_across(
+    h: np.ndarray,
+    tile: TileSpec,
+    x_center: float,
+    radius: float,
+    ground_z: float,
+    yaw_deg: float = 0.0,
+    sink: float = 0.0,
+) -> np.ndarray:
+    """A log lying across the lane: cylinder axis along the lane (Y) turned
+    `yaw_deg` about Z, centre `sink` below the surface-touching position, so
+    its crest is at ground_z + 2*radius - sink. Raises cells only."""
+    u, _ = rotated_coords(tile, x_center, 0.0, yaw_deg)
+    r2 = radius**2 - u**2
+    mask = r2 > 0
+    top = ground_z + radius - sink + np.sqrt(np.where(mask, r2, 0.0))
+    h[mask] = np.maximum(h[mask], top[mask])
+    return h
+
+
+def stair_profile_1d(u: np.ndarray, base_z: float, rise: float, tread: float, n_steps: int,
+                     platform_length: float, sign: float = 1.0) -> np.ndarray:
+    """Symmetric up/plateau/down staircase as a function of the along-axis
+    coordinate `u` (0 at the platform centre): the counterpart of
+    `symmetric_stair_profile` for shapes that are evaluated per cell (rotated
+    stairs) instead of built from axis-aligned slabs."""
+    half_platform = platform_length / 2
+    d = np.abs(u) - half_platform  # distance beyond the platform edge
+    level = np.where(d <= 0, n_steps, n_steps - np.ceil(d / tread))
+    level = np.clip(level, 0, n_steps)
+    return base_z + sign * rise * level

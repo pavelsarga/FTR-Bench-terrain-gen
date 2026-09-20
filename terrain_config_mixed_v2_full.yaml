@@ -1,0 +1,42 @@
+# mixed_v2_full — every row of mixed_v2_straight (pulled in by reference, so
+# the two courses cannot drift apart) PLUS the three rows that require the
+# robot to TURN. Kept separate because MARV's yaw authority under load is
+# ~4% (see CLAUDE.md): a policy can only pass these by lifting its flippers
+# on the flat approach and pivoting on the big wheels, which is exactly the
+# posture change we want it to discover — but whether the sim robot can do
+# it at all is decided by the calibration turn test, not assumed.
+#
+# The gate opening is 0.9 m for a 0.57 m robot and its centre is at most
+# 0.5 m off the lane centreline: the 1.05 m wide heightmap window only sees
+# |y| <= 0.525, so a larger offset would be invisible to the policy (it
+# still gets the goal vector, but not the wall edge).
+#
+#   python generate_terrain.py terrain_config_mixed_v2_full.yaml \
+#       --output-dir ../FTR-Benchmark/ftr_envs/assets/terrain --overwrite
+
+name: mixed_v2_full
+include_rows: terrain_config_mixed_v2_straight.yaml
+
+# The turning rows get lane side walls (`side_walls`, one wall along each Y edge of
+# every tile of the row, 0.2 m above the tile's tallest point = 1.2 m here): a robot that
+# turns and keeps going would otherwise leave the lane and wander into the neighbouring
+# rows. The gate walls themselves are 1.0 m. The other rows deliberately have no side walls.
+rows:
+  # one wall, opening off-centre; target behind the opening
+  - type: offset_gate
+    goal_lateral_offset: [0.3, 0.5]
+    extra: {n_gates: 1, min_offset: 0.3, max_offset: 0.5, opening: 0.9, mirror_alternate: true,
+            side_walls: {height: 0.2, width: 0.15}}
+
+  # two walls, openings on opposite sides: turn, straighten, turn back
+  - type: offset_gate
+    name: chicane
+    goal_lateral_offset: [0.3, 0.5]
+    extra: {n_gates: 2, gate_spacing: 2.5, min_offset: 0.3, max_offset: 0.5, opening: 0.9, mirror_alternate: true,
+            side_walls: {height: 0.2, width: 0.15}}
+
+  # open ground, target off to one side: the pure heading task
+  - type: flat_patch
+    name: flat_turn
+    goal_lateral_offset: [0.4, 1.0]
+    extra: {side_walls: {height: 0.2, width: 0.15}}

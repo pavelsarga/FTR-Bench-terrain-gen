@@ -27,13 +27,34 @@ def main() -> None:
     parser.add_argument("--overwrite", action="store_true", help="Allow replacing existing <name>.* files")
     args = parser.parse_args()
 
-    with open(args.terrain_config) as f:
-        course_cfg = yaml.safe_load(f)
+    course_cfg, resolved = load_course_config(args.terrain_config)
 
     generate(
-        course_cfg, args.output_dir, source_config_path=args.terrain_config,
+        course_cfg, args.output_dir,
+        # a config that pulls rows from another file is copied to gen_config/ in its
+        # RESOLVED form (env_type_registry reads the row list from that copy)
+        source_config_path=None if resolved else args.terrain_config,
         overwrite=args.overwrite, dry_run=args.dry_run,
     )
+
+
+def load_course_config(path: Path) -> tuple[dict, bool]:
+    """Read a terrain config; `include_rows: <other config>` (relative to this
+    file) prepends that course's rows to this one's, so a variant course
+    (the turning-obstacle `*_full` course) shares its base rows with the
+    straight-drive course by reference instead of by copy. Returns the
+    config and whether anything was included."""
+    with open(path) as f:
+        course_cfg = yaml.safe_load(f)
+    include = course_cfg.pop("include_rows", None)
+    if not include:
+        return course_cfg, False
+    base_cfg, _ = load_course_config(path.parent / include)
+    course_cfg["rows"] = list(base_cfg["rows"]) + list(course_cfg.get("rows", []))
+    for key in ("tile", "cell_size", "base_z", "border_width", "repeats", "seed", "arena_band",
+                "bidirectional", "spawn_lateral_jitter", "birth_clearance", "birth_z_clearance", "decor", "feature_offset"):
+        course_cfg.setdefault(key, base_cfg[key]) if key in base_cfg else None
+    return course_cfg, True
 
 
 if __name__ == "__main__":

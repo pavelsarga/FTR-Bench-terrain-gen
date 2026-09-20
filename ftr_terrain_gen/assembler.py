@@ -6,6 +6,10 @@ heightmap plot (tile grid + start/goal markers) to `plot/<name>.svg` —
 neither is read by `Terrain`/FTR-Bench, both are logging/eval-time artifacts
 (config provenance, quick visual reference for notebooks).
 
+Optional top-level `arena_band: {wall_height, wall_width}` fills the
+`border_width` ring around the course with flat ground and fences its outer
+edge, so robots that overshoot a goal on an edge tile stay on solid ground
+(outside every tile's out-of-range zone) instead of falling off the world.
 Optional top-level `tile_dividers: {height, width}` in terrain_config.yaml adds
 a wall at every internal tile boundary within each row (see
 `compute_tile_dividers`) — off by default, applies to every row. A row's own
@@ -26,7 +30,7 @@ import yaml
 
 from ftr_terrain_gen.birth import build_birth
 from ftr_terrain_gen.grid import CourseGrid
-from ftr_terrain_gen.registry import get_obstacle
+from ftr_terrain_gen.offset import resolve_obstacle
 
 
 def _sanitize(name: str) -> str:
@@ -37,7 +41,7 @@ def build_map(grid: CourseGrid) -> np.ndarray:
     shape = grid.map_shape
     arr = np.full(shape, -1.0, dtype=np.float32)
     for tile in grid.iter_tiles():
-        obstacle = get_obstacle(tile.obstacle_type)
+        obstacle = resolve_obstacle(tile.obstacle_type, tile.diff)
         tile_spec = grid.tile_spec()
         patch = obstacle.build_heightmap(tile_spec, tile.diff)
         i0, j0 = grid.world_to_index((tile.x_center - grid.tile_width / 2, tile.y_center - grid.tile_depth / 2))
@@ -128,15 +132,48 @@ def compute_side_walls(grid: CourseGrid, heightmap: np.ndarray) -> list[tuple[fl
     return walls
 
 
+def compute_arena_band(grid: CourseGrid, band_cfg: dict) -> tuple[list, list]:
+    """Flat ground filling the `border_width` ring around the course, plus a
+    wall around its outer edge — so a robot that misses its goal and drives
+    off the last tile (or leaves a lane sideways) lands on ground inside a
+    fence instead of falling into the void. The band lies OUTSIDE every
+    tile's out-of-range zone, so it only ever catches robots that are about
+    to be reset anyway. Returns (ground_slabs, wall_slabs) as
+    (x_center, y_center, width, depth, top_z) specs."""
+    bw = grid.border_width
+    ww = band_cfg.get("wall_width", 0.2)
+    wh = band_cfg.get("wall_height", 1.0)
+    hx, hy = grid.course_width_x / 2, grid.course_depth_y / 2
+    z = grid.base_z
+    ground = [
+        (0.0, hy + bw / 2, grid.course_width_x + 2 * bw, bw, z),
+        (0.0, -hy - bw / 2, grid.course_width_x + 2 * bw, bw, z),
+        (hx + bw / 2, 0.0, bw, grid.course_depth_y, z),
+        (-hx - bw / 2, 0.0, bw, grid.course_depth_y, z),
+    ]
+    ox, oy = hx + bw, hy + bw  # outer edge of the band
+    walls = [
+        (0.0, oy - ww / 2, 2 * ox, ww, z + wh),
+        (0.0, -oy + ww / 2, 2 * ox, ww, z + wh),
+        (ox - ww / 2, 0.0, ww, 2 * oy, z + wh),
+        (-ox + ww / 2, 0.0, ww, 2 * oy, z + wh),
+    ]
+    return ground, walls
+
+
 def build_usd(
     grid: CourseGrid,
     usd_path: Path,
     dividers: list[tuple[float, float, float, float, float]] = (),
     side_walls: list[tuple[float, float, float, float, float]] = (),
+    band: list[tuple[float, float, float, float, float]] = (),
 ) -> None:
     from pxr import Gf, Usd, UsdGeom
 
-    from ftr_terrain_gen.usd_utils import add_ground_slab
+    from ftr_terrain_gen.edges import build_lips_usd, lip_friction
+    from ftr_terrain_gen.usd_utils import (
+        WALL_COLOR, add_cube, add_ground_slab, bind_friction, ensure_friction_material, friction_spec,
+    )
 
     stage = Usd.Stage.CreateNew(str(usd_path))
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
@@ -145,19 +182,39 @@ def build_usd(
     stage.SetDefaultPrim(root.GetPrim())
 
     tile_spec = grid.tile_spec()
+    n_bound = 0
+    n_lips = 0
     for tile in grid.iter_tiles():
-        obstacle = get_obstacle(tile.obstacle_type)
+        obstacle = resolve_obstacle(tile.obstacle_type, tile.diff)
         row_path = f"/World/row_{tile.row_index:02d}_{_sanitize(tile.obstacle_type)}"
         tile_path = f"{row_path}/tile_{tile.col_index:02d}"
         tile_xform = UsdGeom.Xform.Define(stage, tile_path)
         UsdGeom.Xformable(tile_xform).AddTranslateOp().Set(Gf.Vec3d(tile.x_center, tile.y_center, 0.0))
         obstacle.build_usd(stage, tile_path, tile_spec, tile.diff)
+        friction = friction_spec(tile.diff.extra)
+        if friction is not None:
+            n_bound += bind_friction(stage, tile_path, ensure_friction_material(stage, *friction))
+        lip_spec = tile.diff.extra.get("edge_lip")
+        if lip_spec:
+            own = obstacle.build_lips(stage, f"{tile_path}/lips", tile_spec, tile.diff, lip_spec)
+            n_lips += own if own is not None else build_lips_usd(
+                stage, f"{tile_path}/lips", obstacle.build_heightmap(tile_spec, tile.diff), tile_spec, lip_spec)
+            risers = stage.GetPrimAtPath(f"{tile_path}/risers")  # a stepped mesh's own vertical faces
+            if risers.IsValid():
+                n_lips += bind_friction(stage, str(risers.GetPath()), ensure_friction_material(stage, lip_friction(lip_spec)))
+    if n_bound:
+        print(f"[generate_terrain] per-row friction: {n_bound} colliders bound to a custom physics material")
+    if n_lips:
+        print(f"[generate_terrain] edge lips: {n_lips} high-friction nosings along step edges")
 
     for i, (x_center, y_center, width, depth, top_z) in enumerate(dividers):
         add_ground_slab(stage, f"/World/tile_dividers/div_{i:03d}", x_center, y_center, width, depth, top_z, tile_spec)
 
     for i, (x_center, y_center, width, depth, top_z) in enumerate(side_walls):
         add_ground_slab(stage, f"/World/side_walls/wall_{i:03d}", x_center, y_center, width, depth, top_z, tile_spec)
+
+    for i, (x_center, y_center, width, depth, top_z) in enumerate(band):
+        add_ground_slab(stage, f"/World/arena_band/seg_{i:03d}", x_center, y_center, width, depth, top_z, tile_spec)
 
     stage.Save()
 
@@ -242,12 +299,16 @@ def generate(
     tile_cfg = course_cfg.get("tile", {})
     from ftr_terrain_gen.grid import RowConfig
 
+    # course-wide `feature_offset: {x, y}` applies to every row that does not set its own
+    course_offset = course_cfg.get("feature_offset")
     rows = [
         RowConfig(
             type=r["type"],
             min_height=r.get("min_height", 0.0),
             max_height=r.get("max_height", 0.0),
-            extra=r.get("extra", {}),
+            extra=({"feature_offset": course_offset, **r.get("extra", {})} if course_offset else r.get("extra", {})),
+            grade=r.get("grade", "linear"),
+            goal_lateral_offset=tuple(r["goal_lateral_offset"]) if r.get("goal_lateral_offset") else None,
         )
         for r in course_cfg["rows"]
     ]
@@ -265,8 +326,9 @@ def generate(
     print(f"[generate_terrain] course '{name}': {grid.n_rows} rows x {grid.repeats} repeats")
     print(f"[generate_terrain] extent: {grid.course_width_x:.2f} x {grid.course_depth_y:.2f} m "
           f"(map {grid.map_shape}, lower={grid.map_lower}, upper={grid.map_upper})")
-    for row in rows:
-        print(f"  row: {row.type:24s} height=[{row.min_height},{row.max_height}]")
+    for r, row in zip(course_cfg["rows"], rows):
+        label = r.get("name", row.type)
+        print(f"  row: {label:24s} type={row.type:22s} height=[{row.min_height},{row.max_height}] grade={row.grade}")
 
     heightmap = build_map(grid)
     divider_cfg = course_cfg.get("tile_dividers")
@@ -276,10 +338,18 @@ def generate(
     side_walls = compute_side_walls(grid, heightmap)
     if side_walls:
         paint_wall_segments(heightmap, grid, side_walls)
+    band_cfg = course_cfg.get("arena_band")
+    band: list = []
+    if band_cfg:
+        band_ground, band_walls = compute_arena_band(grid, band_cfg if isinstance(band_cfg, dict) else {})
+        band = band_ground + band_walls
+        paint_wall_segments(heightmap, grid, band)
     birth = build_birth(
         grid,
         z_clearance=course_cfg.get("birth_z_clearance", 0.125),
         birth_clearance=course_cfg.get("birth_clearance", 1.0),
+        bidirectional=course_cfg.get("bidirectional", False),
+        spawn_lateral_jitter=course_cfg.get("spawn_lateral_jitter", 0.0),
     )
     config_yaml = build_config_yaml(grid, course_cfg.get("camera", {"position": [-40, 40, 25], "target": [0, 5, -5]}))
 
@@ -289,6 +359,8 @@ def generate(
         print(f"[generate_terrain] tile dividers: {len(dividers)}")
     if side_walls:
         print(f"[generate_terrain] side walls: {len(side_walls)}")
+    if band:
+        print(f"[generate_terrain] arena band: {grid.border_width} m ground ring + perimeter wall")
 
     if dry_run:
         print("[generate_terrain] --dry-run: not writing any files")
@@ -298,23 +370,34 @@ def generate(
         (output_dir / sub).mkdir(parents=True, exist_ok=True)
 
     usd_path = output_dir / "usd" / f"{name}.usd"
+    decor_path = output_dir / "usd" / f"{name}_decor.usd"
     map_path = output_dir / "map" / f"{name}.map"
     config_path = output_dir / "config" / f"{name}.yaml"
     birth_path = output_dir / "birth" / f"{name}.json"
     gen_config_path = output_dir / "gen_config" / f"{name}.yaml"
     plot_path = output_dir / "plot" / f"{name}.svg"
 
-    for p in (usd_path, map_path, config_path, birth_path, gen_config_path, plot_path):
+    for p in (usd_path, decor_path, map_path, config_path, birth_path, gen_config_path, plot_path):
         if p.exists() and not overwrite:
             raise FileExistsError(f"{p} already exists — pass --overwrite to replace it")
 
-    build_usd(grid, usd_path, dividers, side_walls)
+    build_usd(grid, usd_path, dividers, side_walls, band)
+    from ftr_terrain_gen.decor import build_decor_usd, resolve_decor_cfg
+
+    decor_cfg = resolve_decor_cfg(course_cfg.get("decor", True))
+    if decor_cfg is not None:
+        n = build_decor_usd(grid, heightmap, birth, decor_cfg, decor_path)
+        print(f"[generate_terrain] decor: {n} decal prims -> {decor_path} (loaded only with terrain_decor: true)")
+    elif decor_path.exists():
+        decor_path.unlink()
     with open(map_path, "wb") as f:
         np.save(f, heightmap)
     with open(config_path, "w") as f:
         yaml.safe_dump(config_yaml, f, sort_keys=False)
     with open(birth_path, "w") as f:
-        json.dump(birth, f, indent=2)
+        # one spawn entry per line: a bidirectional, jittered course has 2000+ entries, and the
+        # pretty-printed form was 20 lines each (a 46k-line file per course in the asset tree)
+        f.write("[\n" + ",\n".join(json.dumps(b, separators=(", ", ": ")) for b in birth) + "\n]\n")
     if source_config_path is not None:
         shutil.copyfile(source_config_path, gen_config_path)
     else:

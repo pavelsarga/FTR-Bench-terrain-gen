@@ -1,0 +1,33 @@
+# hill_probe — open-loop capability probe, not a training course. Three steep_hill rows
+# graded 15 -> 45 deg on 1.8 m ramps, differing only in the surface friction bound to the
+# hill, driven with a scripted flat-flipper full-throttle action:
+#   bash scripts/eval_auto.sh experiments/baselines/marv_rl_2 --map hill_probe --num_envs 30 \
+#       --max_steps 600 --scripted_action 1,0,-0.143,-0.143,0.143,0.143 \
+#       env_cfg_overrides.flipper_control_mode=position --headless --output_dir logs/hill_probe --eval_id probe
+name: hill_probe
+seed: 7
+cell_size: 0.05
+repeats: 10
+bidirectional: false
+
+tile:
+  width: 8.8
+  depth: 3.333333333333
+
+border_width: 2.0
+base_z: 0.5
+
+camera:
+  position: [-30, 30, 20]
+  target: [0, 0, 0]
+
+rows:
+  - type: steep_hill
+    name: hill_default_friction
+    extra: {min_angle: 15, max_angle: 45, ramp_length: 1.8, crest_length: 0.6, mesh_stride: 2}
+  - type: steep_hill
+    name: hill_friction_2
+    extra: {friction: 2.0, min_angle: 15, max_angle: 45, ramp_length: 1.8, crest_length: 0.6, mesh_stride: 2}
+  - type: steep_hill
+    name: hill_friction_8
+    extra: {friction: 8.0, min_angle: 15, max_angle: 45, ramp_length: 1.8, crest_length: 0.6, mesh_stride: 2}

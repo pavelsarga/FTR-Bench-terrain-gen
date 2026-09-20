@@ -46,7 +46,14 @@ class DiagonalTrunk(Obstacle):
     def _tilt_deg(self, diff: DifficultyParams) -> float:
         lo = diff.extra.get("min_angle", MIN_ANGLE)
         hi = diff.extra.get("max_angle", MAX_ANGLE)
-        tilt = lo + (hi - lo) * diff.t
+        if diff.extra.get("mirror_alternate", False):
+            # grade the MAGNITUDE min->max and alternate the sign by repeat, so
+            # every tilt is seen in both handednesses (custom_mixed graded
+            # -45 -> +45 across the row and the policy came out handed:
+            # 0.97 success at -45 deg, 0.31 at +45 deg)
+            tilt = (abs(lo) + (abs(hi) - abs(lo)) * diff.t) * diff.mirror_sign
+        else:
+            tilt = lo + (hi - lo) * diff.t
         if abs(tilt) < MIN_TILT_MAGNITUDE:
             tilt = MIN_TILT_MAGNITUDE if tilt >= 0 else -MIN_TILT_MAGNITUDE
         return tilt

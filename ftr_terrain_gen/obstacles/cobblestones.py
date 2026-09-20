@@ -28,6 +28,24 @@ class Cobblestones(Obstacle):
         grid_n = int(diff.extra.get("grid_n", GRID_N))
         cell = field_size / grid_n
         heights = diff.rng().uniform(0.0, diff.height, size=(grid_n, grid_n))
+        max_step = diff.extra.get("max_step")
+        if max_step is not None:
+            # NIST stepfield rule: no two adjacent blocks differ by more than
+            # `max_step` — raise the low neighbour of any too-tall block.
+            # Without it a field's difficulty is decided by the seed, not by
+            # `diff.height` (custom_mixed's cobblestones scored 0.39 at col 7
+            # and 0.71 at col 8), and a single 0.3 m block next to a 0 m one
+            # is a step the robot cannot take from inside the field.
+            for _ in range(grid_n):
+                changed = False
+                for i in range(grid_n):
+                    for j in range(grid_n):
+                        for a, b in ((i + 1, j), (i - 1, j), (i, j + 1), (i, j - 1)):
+                            if 0 <= a < grid_n and 0 <= b < grid_n and heights[a, b] - heights[i, j] > max_step:
+                                heights[i, j] = heights[a, b] - max_step
+                                changed = True
+                if not changed:
+                    break
         return field_size, grid_n, cell, heights
 
     def _field_x(self, tile: TileSpec, diff: DifficultyParams, field_size: float) -> float:

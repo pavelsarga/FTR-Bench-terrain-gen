@@ -28,8 +28,8 @@ def _bump(r2: float) -> float:
 class Stump(Obstacle):
     """A smooth radial bump, f(x, y) = sigmoid'(x^2 + y^2) in scaled
     coordinates, approximated by a `grid_n` x `grid_n` grid of small raised
-    blocks over a `field_size` x `field_size` patch. Height is fixed
-    (`HEIGHT`); what grades with difficulty is the bump's center Y offset,
+    blocks over a `field_size` x `field_size` patch. Height is `extra.height`
+    if given, else the row's graded `diff.height` (else `HEIGHT`); the bump's center Y offset also grades,
     sliding from slightly left of the tile's centerline (`diff.t` = 0) to
     slightly right (`diff.t` = 1). Field is CENTERED in the tile (both
     margins equal). `extra.field_size`/`extra.grid_n`/`extra.scale`/
@@ -49,7 +49,9 @@ class Stump(Obstacle):
         field_size = diff.extra.get("field_size", FIELD_SIZE)
         grid_n = int(diff.extra.get("grid_n", GRID_N))
         scale = diff.extra.get("scale", SCALE)
-        height = diff.extra.get("height", HEIGHT)
+        # a row that gives min_height/max_height grades the peak; `extra.height` (the
+        # original fixed-height behaviour, custom_mixed's 0.25) still takes precedence
+        height = diff.extra.get("height", diff.height if diff.height > 0 else HEIGHT)
         field_x = self._field_x(tile, diff, field_size)
         center_y = self._center_y(diff)
         cell = field_size / grid_n
