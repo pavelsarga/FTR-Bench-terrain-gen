@@ -202,6 +202,14 @@ def build_usd(
             risers = stage.GetPrimAtPath(f"{tile_path}/risers")  # a stepped mesh's own vertical faces
             if risers.IsValid():
                 n_lips += bind_friction(stage, str(risers.GetPath()), ensure_friction_material(stage, lip_friction(lip_spec)))
+        # Group prims that only exist as parents of other prims (".../lips", ".../offset/lips") are
+        # created typeless. That is valid USD and composes correctly, but importers handle a typeless
+        # prim under a transformed tile inconsistently: Blender skips it and reparents its children
+        # to the scene root, dropping the tile's translation, so every tile's lips pile up at their
+        # tile-local coordinates around the origin. A transform-free Xform changes no position.
+        for p in Usd.PrimRange(stage.GetPrimAtPath(tile_path)):
+            if not p.GetTypeName():
+                UsdGeom.Xform.Define(stage, p.GetPath())
     if n_bound:
         print(f"[generate_terrain] per-row friction: {n_bound} colliders bound to a custom physics material")
     if n_lips:

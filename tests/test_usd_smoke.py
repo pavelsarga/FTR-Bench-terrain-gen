@@ -79,3 +79,23 @@ def test_row_friction_binds_a_physics_material_only_to_that_row(tmp_path):
     mat = stage.GetPrimAtPath("/World/Looks/friction_s2_d2")
     assert mat.IsValid()
     assert mat.GetAttribute("physxMaterial:frictionCombineMode").Get() == "multiply"
+
+
+def test_no_typeless_prim_under_a_transformed_tile(tmp_path):
+    """Lip groups used to be typeless prims under the translated tile Xform: valid USD, but Blender
+    reparents a typeless prim's children to the root and so piled every tile's lips at the origin."""
+    usd_path = tmp_path / "course.usd"
+    grid = CourseGrid(
+        rows=[RowConfig(type="raised_platform", min_height=0.2, max_height=0.3, extra={"edge_lip": True}),
+              RowConfig(type="cobblestones", min_height=0.15, max_height=0.3,
+                        extra={"edge_lip": True, "lowered": True, "feature_offset": {"x": 0.5}})],
+        repeats=2, tile_width=8.8, tile_depth=10.0 / 3.0, cell_size=0.05, base_z=0.5,
+        border_width=2.0, course_seed=3,
+    )
+    build_usd(grid, usd_path)
+    stage = Usd.Stage.Open(str(usd_path))
+    tiles = [p for p in stage.Traverse() if p.GetName().startswith("tile_")]
+    assert tiles
+    for tile in tiles:
+        for p in Usd.PrimRange(tile):
+            assert p.GetTypeName(), f"{p.GetPath()} is typeless"
