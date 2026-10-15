@@ -23,6 +23,7 @@ import numpy as np
 from ftr_terrain_gen.obstacle_base import DifficultyParams, Obstacle, TileSpec
 from ftr_terrain_gen.registry import get_obstacle
 from ftr_terrain_gen.shapes import paint_rect
+from ftr_terrain_gen.variants import apply_variants
 
 NO_OFFSET = {"stairs_ascent_descent", "sequence", "flat_patch"}
 _SEED_SALT = 424242  # separate stream from the obstacle's own diff.rng()
@@ -91,7 +92,7 @@ class OffsetObstacle(Obstacle):
 
 def resolve_obstacle(obstacle_type: str, diff: DifficultyParams) -> Obstacle:
     """The obstacle for a tile, wrapped with its random offset when the row asks for one."""
-    base = get_obstacle(obstacle_type)
+    base = apply_variants(get_obstacle(obstacle_type), diff)  # extra.sample / extra.lowered
     spec = diff.extra.get("feature_offset")
     if not spec or obstacle_type in NO_OFFSET:
         return base
